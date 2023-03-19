@@ -1,4 +1,5 @@
 #
+import os
 import openai
 import sys
 import re
@@ -57,9 +58,9 @@ no changes added to commit (use "git add" and/or "git commit -a")"""
                     conflict_ranges[i + 1] = (fair_middle, end2)
 
             # Get text for each merge conflict
-            for start, end in conflict_ranges:
-                conflict = ''.join(lines[start:end])
-                conflicts.append((filename, conflict))
+            for (merge_start, merge_end), (range_start, range_end) in zip(conflict_indices, conflict_ranges):
+                conflict = ''.join(lines[range_start:range_end])
+                conflicts.append((filename, merge_start, merge_end, conflict))
     return conflicts
 
 def colorize_conflict_text(conflict_text):
@@ -81,9 +82,22 @@ def colorize_conflict_text(conflict_text):
 
 # match up to 3 lines in regex:
 def main():
+    engine = os.environ.get('OPENAI_ENGINE', 'gpt-3.5-turbo')
     # print(parse_stdin())
-    for fname, conflict_text in parse_stdin():
+    for fname, merge_start, merge_end, conflict_text in parse_stdin():
+        print(f"Merge conflict in {fname}:")
+        print(f'Start: {merge_start}, End: {merge_end}')
         print(colorize_conflict_text(conflict_text))
+        print()
+        # Call the OpenAI API to get suggestions with prompt.
+        completion = openai.ChatCompletion.create(
+          model=engine,
+          messages=[
+            {"role": "system", "content": "You are a helpful assistant that helps users resolve merge conflicts."},
+            {"role": "user", "content": f'Below is an example of a merge conflict. Please resolve the merge conflict if it is unambiguous. If the merge conflict is ambiguous, explain in simple language what is going on and present two possible resolutions as "Resolution 1:\n```code```\nExplanation" and "Resolution 2:\n```code```\nExplanation":\n\n{conflict_text}'}
+          ]
+        )
+        print(completion.choices[0].message)
 
 if __name__ == '__main__':
     main()
