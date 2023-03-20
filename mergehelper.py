@@ -5,8 +5,8 @@ import openai
 import sys
 import re
 
-NUM_LINES_BEFORE = 1
-NUM_LINES_AFTER = 1
+NUM_LINES_BEFORE = 10
+NUM_LINES_AFTER = 10
 
 def parse_git_status():
     """ Returns: list of merge conflicts [(filename, conflict)] """
