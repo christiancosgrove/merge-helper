@@ -25,7 +25,6 @@ no changes added to commit (use "git add" and/or "git commit -a")"""
     # Need to parse out list of file names "both modified" from after "Unmerged paths" section
 
     filenames = re.findall(r"both modified:   (.*)", stdin)
-    print("FILENAMES", filenames)
 
     # For each file name, get the contents of the file
     conflicts = []
@@ -80,6 +79,55 @@ def colorize_conflict_text(conflict_text):
     conflict_text = '\n'.join(lines) + '\033[0m'
     return conflict_text
 
+def colorize_response(text):
+    # Colorize ```...``` blocks green
+
+    # Get all lines
+    lines = text.splitlines()
+
+    # Get all lines beginning with "```"
+    indices = [i for i, line in enumerate(lines) if line.startswith('```')]
+
+    # For each pair of indices, colorize the text between them green
+    for i in range(0, len(indices), 2):
+        start, end = indices[i], indices[i + 1]
+        # lines[start] = '\033[92m' + lines[start]
+        # lines[end] = lines[end] + '\033[0m'
+        # Only do in between
+        lines[start + 1:end] = ['\033[92m' + line + '\033[0m' for line in lines[start + 1:end]]
+    
+    return '\n'.join(lines)
+
+def parse_resolutions(response):
+    lines = response.splitlines()
+
+    # Get all lines starting with "Resolution"
+    indices = [i for i, line in enumerate(lines) if line.startswith('Resolution')]
+
+    # Get text between each pair of indices
+    resolutions = [lines[i:j] for i, j in zip(indices, indices[1:] + [len(lines)])]
+
+    out = []
+
+    for resolution in resolutions:
+        # Get the code block indices, which are the first and last lines that start with "```"
+        code_block_indices = [i for i, line in enumerate(resolution) if line.startswith('```')]
+        code_start, code_end = code_block_indices[0], code_block_indices[-1]
+
+        # Get the text between the code block indices
+        code = resolution[code_start + 1:code_end]
+        # Join
+        code = '\n'.join(code)
+
+        # Get the explanation text, which runs from the first line that starts with "Explanation" to the end
+        explanation_start = [i for i, line in enumerate(resolution) if line.startswith('Explanation')][0]
+        explanation = resolution[explanation_start:]
+        # Join
+        explanation = '\n'.join(explanation)
+
+        out.append((code, explanation))
+    return out
+
 # match up to 3 lines in regex:
 def main():
     engine = os.environ.get('OPENAI_ENGINE', 'gpt-3.5-turbo')
@@ -94,10 +142,41 @@ def main():
           model=engine,
           messages=[
             {"role": "system", "content": "You are a helpful assistant that helps users resolve merge conflicts."},
-            {"role": "user", "content": f'Below is an example of a merge conflict. Please resolve the merge conflict if it is unambiguous. If the merge conflict is ambiguous, explain in simple language what is going on and present two possible resolutions as "Resolution 1:\n```code```\nExplanation" and "Resolution 2:\n```code```\nExplanation":\n\n{conflict_text}'}
-          ]
+            {"role": "user", "content": f'Below is an example of a merge conflict. Please resolve the merge conflict if it is unambiguous. If the merge conflict is ambiguous, present two possible substitions for the <<<<<<< ... >>>>>>> block as "Resolution 1:\n```code```\nExplanation" and "Resolution 2:\n```code```\nExplanation". Do not include any code from the context in the resolutions. Explain the implications of the changes in the context of the codebase.\n\n{conflict_text}'}
+          ], temperature=0
         )
-        print(completion.choices[0].message)
+        # print(completion.choices[0].message)
+        response = completion.choices[0].message['content']
+        print(colorize_response(response))
+        resolutions = parse_resolutions(response)
 
+        # Get keyboard input from stdin, and validate
+        while True:
+            try:
+                user_input = input('Enter resolution (1-' + str(len(resolutions)) + '), or "n" for none: ')
+                if user_input == 'n':
+                    break
+                user_input = int(user_input)
+                if user_input < 1 or user_input > len(resolutions):
+                    raise ValueError
+                break
+            except ValueError:
+                print('Invalid input. Please enter a number between 1 and', len(resolutions), 'or "n".')
+        if user_input == 'n':
+            print('Not applying any resolution. Please manually resolve the merge conflict.')
+        else:
+            # Apply the resolution by replacing the conflict text with the code from the resolution
+            print('Applying resolution', user_input)
+            code, _ = resolutions[user_input - 1]
+            
+            # Write to file
+            with open(fname, 'rw') as f:
+                # Just read the whole file into memory
+                contents = f.read()
+                contents = contents.replace(conflict_text, code)
+                f.seek(0)
+                f.write(contents)
+                f.truncate()
+                
 if __name__ == '__main__':
     main()
