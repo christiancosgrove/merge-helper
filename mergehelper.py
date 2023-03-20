@@ -1,4 +1,4 @@
-#
+#!/usr/bin/env python
 import os
 import time
 import openai
@@ -106,7 +106,7 @@ def colorize_response(text):
     
     return '\n'.join(lines)
 
-def get_code_and_explanation(lines):
+def get_code(lines):
     # Get the code block indices, which are the first and last lines that start with "```"
     code_block_indices = [i for i, line in enumerate(lines) if line.startswith('```')]
     code_start, code_end = code_block_indices[0], code_block_indices[-1]
@@ -116,13 +116,8 @@ def get_code_and_explanation(lines):
     # Join
     code = '\n'.join(code)
 
-    # Get the explanation text, which runs from the first line that starts with "Explanation" to the end
-    explanation_start = [i for i, line in enumerate(lines) if line.startswith('Explanation')][0]
-    explanation = lines[explanation_start:]
-    # Join
-    explanation = '\n'.join(explanation)
+    return code
 
-    return code, explanation
 
 def parse_resolutions(response):
     lines = response.splitlines()
@@ -136,13 +131,14 @@ def parse_resolutions(response):
     out = []
 
     for resolution in resolutions:
-        code, explanation = get_code_and_explanation(resolution)
-        out.append((code, explanation))
+        # code, explanation = get_code_and_explanation(resolution)
+        code = get_code(resolution)
+        out.append(code)
     
     # If we found no resolutions, then it's possible that there's just a single code block
     if len(out) == 0:
-        code, explanation = get_code_and_explanation(lines)
-        out.append((code, explanation))
+        code = get_code(lines)
+        out.append(code)
 
     return out
 
@@ -188,7 +184,7 @@ def main():
             print('Not applying any resolution. Please manually resolve the merge conflict.')
         else:
             # Apply the resolution by replacing the conflict text with the code from the resolution
-            code, _ = resolutions[user_input - 1]
+            code = resolutions[user_input - 1]
 
             # Get just the lines of the conflict from `conflict_text`
             lines = conflict_text.splitlines()
