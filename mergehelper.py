@@ -174,7 +174,8 @@ def main():
         # Get keyboard input from stdin, and validate
         while True:
             try:
-                user_input = input('Enter resolution (1-' + str(len(resolutions)) + '), or "n" for none: ')
+                resolution_range = '1-' + str(len(resolutions)) if len(resolutions) > 1 else '1'
+                user_input = input(f'Enter resolution ({resolution_range}), or "n" for none: ')
                 if user_input == 'n':
                     break
                 user_input = int(user_input)
