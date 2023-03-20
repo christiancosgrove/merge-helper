@@ -101,9 +101,8 @@ def colorize_response(text):
         # Only do in between
         lines[start + 1:end] = ['\033[92m' + line + '\033[0m' for line in lines[start + 1:end]]
 
-    # Work backward, deleting all ``` lines
-    for i in range(len(indices) - 1, -1, -1):
-        del lines[indices[i]]
+    for i in range(len(indices)):
+        lines[indices[i]] = ''
     
     return '\n'.join(lines)
 
