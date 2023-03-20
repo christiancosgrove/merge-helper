@@ -1,12 +1,15 @@
 #!/usr/bin/env python
+import multiprocessing
 import os
+import threading
 import time
 import openai
 import sys
 import re
+from tqdm import tqdm
 
-NUM_LINES_BEFORE = 10
-NUM_LINES_AFTER = 10
+NUM_LINES_BEFORE = 5
+NUM_LINES_AFTER = 5
 
 def parse_git_status():
     """ Returns: list of merge conflicts [(filename, conflict)] """
@@ -64,7 +67,9 @@ no changes added to commit (use "git add" and/or "git commit -a")"""
             # Get text for each merge conflict
             for (merge_start, merge_end), (range_start, range_end) in zip(conflict_indices, conflict_ranges):
                 conflict = ''.join(lines[range_start:range_end])
-                conflicts.append((filename, merge_start, merge_end, conflict))
+                context_before = ''.join(lines[range_start:merge_start])
+                context_after = ''.join(lines[merge_end:range_end])
+                conflicts.append((filename, merge_start, merge_end, conflict, context_before, context_after))
     return conflicts
 
 def colorize_conflict_text(conflict_text):
@@ -142,29 +147,51 @@ def parse_resolutions(response):
 
     return out
 
+def call_openai(conflict_text):
+    engine = os.environ.get('OPENAI_ENGINE', 'gpt-3.5-turbo')
+    completion = openai.ChatCompletion.create(
+        model=engine,
+        messages=[
+        {"role": "system", "content": "You are a helpful assistant that helps users resolve merge conflicts."},
+        {"role": "user", "content": f'This is a merge conflict:\n\n{conflict_text}\n\nPlease resolve the merge conflict if it is unambiguous. If the merge conflict is ambiguous, present two possible substitions for the <<<<<<< ... >>>>>>> block as "Resolution 1:\n```code```\nExplanation" and "Resolution 2:\n```code```\nExplanation".\n\nIMPORTANT: Do not include any code from before "<<<<<<<" in the resolutions.\n\nFinally, explain the implications of the changes in the context of the codebase.'}
+        ], temperature=0.0
+    )
+    return completion.choices[0].message['content']
+
+def call_openai_with_progress_bar(prompt):
+    # print('Calling OpenAI API', end='')
+    print(f'Calling {os.environ.get("OPENAI_ENGINE", "gpt-3.5-turbo")}')
+    # Instead of using Thread, use multiprocessing.Pool with size 1
+    pool = multiprocessing.Pool(processes=1)
+    api_result = pool.apply_async(call_openai, (prompt,))
+
+    while True:
+        if not api_result.ready():
+            print('.', end='')
+            sys.stdout.flush()
+            time.sleep(0.5)
+        else:
+            break
+    
+    # Join and return output
+    print()
+    return api_result.get()
+
 # match up to 3 lines in regex:
 def main():
-    engine = os.environ.get('OPENAI_ENGINE', 'gpt-3.5-turbo')
     conflicts = parse_git_status()
     if len(conflicts) == 0:
         print("No merge conflicts found.")
         return
     
-    for fname, _, _, conflict_text in conflicts:
+    for fname, _, _, conflict_text, context_before, context_after in conflicts:
         print(f"Merge conflict in {fname}:")
         print(colorize_conflict_text(conflict_text))
         print()
         # Call the OpenAI API to get suggestions with prompt.
-        completion = openai.ChatCompletion.create(
-          model=engine,
-          messages=[
-            {"role": "system", "content": "You are a helpful assistant that helps users resolve merge conflicts."},
-            {"role": "user", "content": f'Below is an example of a merge conflict. Please resolve the merge conflict if it is unambiguous. If the merge conflict is ambiguous, present two possible substitions for the <<<<<<< ... >>>>>>> block as "Resolution 1:\n```code```\nExplanation" and "Resolution 2:\n```code```\nExplanation". Do not include any code from the context in the resolutions. Explain the implications of the changes in the context of the codebase.\n\n{conflict_text}'}
-          ], temperature=0
-        )
-        # print(completion.choices[0].message)
-        response = completion.choices[0].message['content']
+        response = call_openai_with_progress_bar(conflict_text)
         print(colorize_response(response))
+        print()
         resolutions = parse_resolutions(response)
 
         # Get keyboard input from stdin, and validate
@@ -192,6 +219,14 @@ def main():
             with open(fname, 'r') as f:
                 contents = f.read()
             contents = contents.replace('\n'.join(conflict_lines), code)
+
+
+            # Deduplicate context lines. If the code block begins with context_before, then remove context_before from the code block.
+            if code.startswith(context_before):
+                code = code[len(context_before):]
+            if code.endswith(context_after):
+                code = code[:-len(context_after)]
+
             with open(fname, 'w') as f:
                 f.write(contents)
             print('Applied resolution', user_input)
