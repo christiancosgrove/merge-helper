@@ -1,5 +1,6 @@
 #
 import os
+import time
 import openai
 import sys
 import re
@@ -7,9 +8,13 @@ import re
 NUM_LINES_BEFORE = 1
 NUM_LINES_AFTER = 1
 
-def parse_stdin():
+def parse_git_status():
     """ Returns: list of merge conflicts [(filename, conflict)] """
-    stdin = sys.stdin.read()
+    # stdin = sys.stdin.read()
+    # print(stdin)
+
+    # Instead of using stdin, just run git status and parse the output
+    git_status = os.popen('git status').read()
 
     # Example:
     """On branch main
@@ -24,7 +29,7 @@ Unmerged paths:
 no changes added to commit (use "git add" and/or "git commit -a")"""
     # Need to parse out list of file names "both modified" from after "Unmerged paths" section
 
-    filenames = re.findall(r"both modified:   (.*)", stdin)
+    filenames = re.findall(r"both modified:   (.*)", git_status)
 
     # For each file name, get the contents of the file
     conflicts = []
@@ -95,6 +100,10 @@ def colorize_response(text):
         # lines[end] = lines[end] + '\033[0m'
         # Only do in between
         lines[start + 1:end] = ['\033[92m' + line + '\033[0m' for line in lines[start + 1:end]]
+
+    # Work backward, deleting all ``` lines
+    for i in range(len(indices) - 1, -1, -1):
+        del lines[indices[i]]
     
     return '\n'.join(lines)
 
@@ -131,10 +140,13 @@ def parse_resolutions(response):
 # match up to 3 lines in regex:
 def main():
     engine = os.environ.get('OPENAI_ENGINE', 'gpt-3.5-turbo')
-    # print(parse_stdin())
-    for fname, merge_start, merge_end, conflict_text in parse_stdin():
-        print(f"Merge conflict in {fname}:")
-        print(f'Start: {merge_start}, End: {merge_end}')
+    conflicts = parse_git_status()
+    if len(conflicts) == 0:
+        print("No merge conflicts found.")
+        return
+    
+    for fname, merge_start, merge_end, conflict_text in conflicts:
+        print(f"Merge conflict in {fname}, line {merge_start}:")
         print(colorize_conflict_text(conflict_text))
         print()
         # Call the OpenAI API to get suggestions with prompt.
@@ -166,17 +178,16 @@ def main():
             print('Not applying any resolution. Please manually resolve the merge conflict.')
         else:
             # Apply the resolution by replacing the conflict text with the code from the resolution
-            print('Applying resolution', user_input)
             code, _ = resolutions[user_input - 1]
             
-            # Write to file
-            with open(fname, 'rw') as f:
-                # Just read the whole file into memory
+            with open(fname, 'r') as f:
                 contents = f.read()
-                contents = contents.replace(conflict_text, code)
-                f.seek(0)
+            contents = contents.replace(conflict_text, code)
+            with open(fname, 'w') as f:
                 f.write(contents)
-                f.truncate()
-                
+            print('Applied resolution', user_input)
+        print()
+
+
 if __name__ == '__main__':
     main()
