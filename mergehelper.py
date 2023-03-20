@@ -144,8 +144,8 @@ def main():
         print("No merge conflicts found.")
         return
     
-    for fname, merge_start, merge_end, conflict_text in conflicts:
-        print(f"Merge conflict in {fname}, line {merge_start}:")
+    for fname, _, _, conflict_text in conflicts:
+        print(f"Merge conflict in {fname}:")
         print(colorize_conflict_text(conflict_text))
         print()
         # Call the OpenAI API to get suggestions with prompt.
@@ -178,10 +178,13 @@ def main():
         else:
             # Apply the resolution by replacing the conflict text with the code from the resolution
             code, _ = resolutions[user_input - 1]
-            
+
+            # Get just the lines of the conflict from `conflict_text`
+            lines = conflict_text.splitlines()
+            conflict_lines = lines[[i for i, line in enumerate(lines) if line.startswith('<<<<<<< HEAD')][0]: [i for i, line in enumerate(lines) if line.startswith('>>>>>>>')][0] + 1]
             with open(fname, 'r') as f:
                 contents = f.read()
-            contents = contents.replace(conflict_text, code)
+            contents = contents.replace('\n'.join(conflict_lines), code)
             with open(fname, 'w') as f:
                 f.write(contents)
             print('Applied resolution', user_input)
