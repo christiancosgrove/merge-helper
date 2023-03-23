@@ -149,13 +149,22 @@ def parse_resolutions(response):
 
 def call_openai(conflict_text):
     engine = os.environ.get('OPENAI_ENGINE', 'gpt-3.5-turbo')
-    completion = openai.ChatCompletion.create(
-        model=engine,
-        messages=[
-        {"role": "system", "content": "You are a helpful assistant that helps users resolve merge conflicts."},
-        {"role": "user", "content": f'This is a merge conflict:\n\n{conflict_text}\n\nPlease resolve the merge conflict if it is unambiguous. If the merge conflict is ambiguous, present two possible substitions for the <<<<<<< ... >>>>>>> block as "Resolution 1:\n```code```\nExplanation" and "Resolution 2:\n```code```\nExplanation".\n\nIMPORTANT: Do not include any code from before "<<<<<<<" in the resolutions.\n\nFinally, explain the implications of the changes in the context of the codebase.'}
-        ], temperature=0.0
-    )
+    retry_timeout = 1 # 1 second. Double every time.
+    while True:
+        try:
+            completion = openai.ChatCompletion.create(
+                model=engine,
+                messages=[
+                {"role": "system", "content": "You are a helpful assistant that helps users resolve merge conflicts."},
+                {"role": "user", "content": f'This is a merge conflict:\n\n{conflict_text}\n\nPlease resolve the merge conflict if it is unambiguous. If the merge conflict is ambiguous, present two possible substitions for the <<<<<<< ... >>>>>>> block as "Resolution 1:\n```code```\nExplanation" and "Resolution 2:\n```code```\nExplanation".\n\nIMPORTANT: Do not include any code from before "<<<<<<<" in the resolutions.\n\nFinally, explain the implications of the changes in the context of the codebase.'}
+                ], temperature=0.0
+            )
+            break
+        except openai.error.RateLimitError as e:
+            print(f'Rate limit error. Retrying in {retry_timeout} seconds.')
+            time.sleep(retry_timeout)
+            retry_timeout *= 2
+            continue
     return completion.choices[0].message['content']
 
 def call_openai_with_progress_bar(prompt):
