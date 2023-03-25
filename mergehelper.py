@@ -92,10 +92,7 @@ def colorize_conflict_text(conflict_text):
 def colorize_response(text):
     # Colorize ```...``` blocks green
 
-    # Get all lines
     lines = text.splitlines()
-
-    # Get all lines beginning with "```"
     indices = [i for i, line in enumerate(lines) if line.startswith('```')]
 
     # For each pair of indices, colorize the text between them green
@@ -112,13 +109,10 @@ def colorize_response(text):
     return '\n'.join(lines)
 
 def get_code(lines):
-    # Get the code block indices, which are the first and last lines that start with "```"
     code_block_indices = [i for i, line in enumerate(lines) if line.startswith('```')]
     code_start, code_end = code_block_indices[0], code_block_indices[-1]
 
-    # Get the text between the code block indices
     code = lines[code_start + 1:code_end]
-    # Join
     code = '\n'.join(code)
 
     return code
@@ -127,10 +121,7 @@ def get_code(lines):
 def parse_resolutions(response):
     lines = response.splitlines()
 
-    # Get all lines starting with "Resolution"
     indices = [i for i, line in enumerate(lines) if line.startswith('Resolution')]
-
-    # Get text between each pair of indices
     resolutions = [lines[i:j] for i, j in zip(indices, indices[1:] + [len(lines)])]
 
     out = []
@@ -148,7 +139,7 @@ def parse_resolutions(response):
     return out
 
 def call_openai(conflict_text):
-    engine = os.environ.get('OPENAI_ENGINE', 'gpt-3.5-turbo')
+    engine = os.environ.get('OPENAI_ENGINE', 'gpt-4')
     retry_timeout = 1 # 1 second. Double every time.
     while True:
         try:
@@ -168,7 +159,6 @@ def call_openai(conflict_text):
     return completion.choices[0].message['content']
 
 def call_openai_with_progress_bar(prompt):
-    # print('Calling OpenAI API', end='')
     print(f'Calling {os.environ.get("OPENAI_ENGINE", "gpt-3.5-turbo")}')
     # Instead of using Thread, use multiprocessing.Pool with size 1
     pool = multiprocessing.Pool(processes=1)
@@ -182,7 +172,6 @@ def call_openai_with_progress_bar(prompt):
         else:
             break
     
-    # Join and return output
     print()
     return api_result.get()
 
@@ -197,7 +186,7 @@ def main():
         print(f"Merge conflict in {fname}:")
         print(colorize_conflict_text(conflict_text))
         print()
-        # Call the OpenAI API to get suggestions with prompt.
+
         response = call_openai_with_progress_bar(conflict_text)
         print(colorize_response(response))
         print()
