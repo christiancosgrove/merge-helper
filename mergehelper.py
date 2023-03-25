@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# Setup: run `mv mergehelper.py /usr/local/bin/mergehelper`
+# then run `mergehelper` in a git repo with merge conflicts
 import multiprocessing
 import os
 import threading
