@@ -21,19 +21,7 @@ def parse_git_status():
     # Instead of using stdin, just run git status and parse the output
     git_status = os.popen('git status').read()
 
-    # Example:
-    """On branch main
-You have unmerged paths.
-  (fix conflicts and run "git commit")
-  (use "git merge --abort" to abort the merge)
-
-Unmerged paths:
-  (use "git add <file>..." to mark resolution)
-        both modified:   test.py
-
-no changes added to commit (use "git add" and/or "git commit -a")"""
-    # Need to parse out list of file names "both modified" from after "Unmerged paths" section
-
+    # TODO: Need to parse out list of file names "both modified" from after "Unmerged paths" section
     filenames = re.findall(r"both modified:   (.*)", git_status)
 
     # For each file name, get the contents of the file
@@ -177,7 +165,6 @@ def call_openai_with_progress_bar(prompt):
     print()
     return api_result.get()
 
-# match up to 3 lines in regex:
 def main():
     conflicts = parse_git_status()
     if len(conflicts) == 0:
