@@ -149,7 +149,7 @@ def call_openai(conflict_text):
     return completion.choices[0].message['content']
 
 def call_openai_with_progress_bar(prompt):
-    print(f'Calling {os.environ.get("OPENAI_ENGINE", "gpt-3.5-turbo")}')
+    print(f'Calling {os.environ.get("OPENAI_ENGINE", "gpt-4")}')
     # Instead of using Thread, use multiprocessing.Pool with size 1
     pool = multiprocessing.Pool(processes=1)
     api_result = pool.apply_async(call_openai, (prompt,))
